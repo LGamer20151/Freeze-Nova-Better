@@ -149,14 +149,15 @@ function playFlipBonusSound() {
   playTone(659.25, 'triangle', 0.18, 0.16);
 }
 
-// --- Level Definitions (Fixed Arrays) ---
-const LEVELS = [
+// --- Level Definitions ---
+const LEVELS = new Array(
   {
     name: "Level 1: Neon Ramps",
-    starTimes:,
+    star3: 14,
+    star2: 20,
     finishX: 5600,
-    checkpoints:,
-    terrain: [
+    checkpoints: new Array(1600, 3400),
+    terrain: new Array(
       { x: -300, y: 390 }, { x: 450, y: 390 },
       { x: 750, y: 315 },  { x: 920, y: 315 },
       { x: 1180, y: 405 }, { x: 1550, y: 405 },
@@ -166,19 +167,20 @@ const LEVELS = [
       { x: 3560, y: 295 }, { x: 3820, y: 295 },
       { x: 4080, y: 215 }, { x: 4200, y: 215 },
       { x: 4620, y: 400 }, { x: 5900, y: 400 }
-    ],
-    hazards: [
+    ),
+    hazards: new Array(
       { x: 1030, y: 390, w: 42, h: 30 },
       { x: 2110, y: 390, w: 65, h: 30 },
       { x: 4350, y: 385, w: 80, h: 30 }
-    ]
+    )
   },
   {
     name: "Level 2: Canyon Gaps",
-    starTimes:,
+    star3: 17,
+    star2: 24,
     finishX: 6400,
-    checkpoints:,
-    terrain: [
+    checkpoints: new Array(1500, 3500),
+    terrain: new Array(
       { x: -300, y: 380 }, { x: 420, y: 380 },
       { x: 720, y: 270 },  { x: 840, y: 270 },
       { x: 1160, y: 420 }, { x: 1480, y: 420 },
@@ -190,19 +192,20 @@ const LEVELS = [
       { x: 4650, y: 390 }, { x: 4950, y: 250 },
       { x: 5080, y: 250 }, { x: 5480, y: 400 },
       { x: 6700, y: 400 }
-    ],
-    hazards: [
+    ),
+    hazards: new Array(
       { x: 960, y: 405, w: 70, h: 30 },
       { x: 3070, y: 415, w: 95, h: 30 },
       { x: 5220, y: 385, w: 95, h: 30 }
-    ]
+    )
   },
   {
     name: "Level 3: Sky Launch",
-    starTimes:,
+    star3: 19,
+    star2: 27,
     finishX: 7000,
-    checkpoints:,
-    terrain: [
+    checkpoints: new Array(1450, 4200),
+    terrain: new Array(
       { x: -300, y: 400 }, { x: 380, y: 400 },
       { x: 680, y: 260 },  { x: 790, y: 260 },
       { x: 1150, y: 420 }, { x: 1420, y: 420 },
@@ -214,28 +217,28 @@ const LEVELS = [
       { x: 4650, y: 380 }, { x: 5050, y: 380 },
       { x: 5380, y: 210 }, { x: 5510, y: 210 },
       { x: 5980, y: 410 }, { x: 7300, y: 410 }
-    ],
-    hazards: [
+    ),
+    hazards: new Array(
       { x: 910, y: 405, w: 90, h: 30 },
       { x: 1990, y: 385, w: 100, h: 30 },
       { x: 3740, y: 415, w: 110, h: 30 },
       { x: 5660, y: 395, w: 120, h: 30 }
-    ]
+    )
   }
-];
+);
 
 let currentLevelIdx = 0;
 let bike, startTime, elapsedTime, flips, timeBonus, state, airRotation;
 let activeCheckpointX = 120;
 let triggeredCheckpoints = new Set();
-let particles = [];
-let floatingTexts = [];
+let particles = new Array();
+let floatingTexts = new Array();
 
 // Input Handling
 const keys = {};
 window.addEventListener('keydown', e => {
   initAudio();
-  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
+  if (e.code === 'ArrowUp' || e.code === 'ArrowDown' || e.code === 'ArrowLeft' || e.code === 'ArrowRight' || e.code === 'Space') {
     e.preventDefault();
   }
   keys[e.code] = true;
@@ -277,15 +280,15 @@ function resetLevel(fullReset = true) {
     radius: 16
   };
   airRotation = 0;
-  particles = [];
+  particles = new Array();
   state = 'playing';
 }
 
 function getTerrainHeight(x) {
-  const terrain = LEVELS[currentLevelIdx].terrain;
+  const terrain = LEVELS.at(currentLevelIdx).terrain;
   for (let i = 0; i < terrain.length - 1; i++) {
-    const p1 = terrain[i];
-    const p2 = terrain[i + 1];
+    const p1 = terrain.at(i);
+    const p2 = terrain.at(i + 1);
     if (x >= p1.x && x <= p2.x) {
       const t = (x - p1.x) / (p2.x - p1.x);
       return {
@@ -340,9 +343,4 @@ function update(dt) {
 
   if (state !== 'playing') return;
 
-  const lvl = LEVELS[currentLevelIdx];
-  elapsedTime = Math.max(0, (performance.now() - startTime) / 1000 - timeBonus);
-
-  const accel = keys['KeyW'] || keys['ArrowUp'];
-  const brake = keys['KeyS'] || keys['ArrowDown'];
-  const leanLeft = keys['KeyA'] || keys['ArrowLeft'];
+  const lvl = LEVELS.at(currentLevelIdx);
