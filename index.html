@@ -3,213 +3,37 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Donut Clicker</title>
-<style>
-  body {
-    margin: 0;
-    min-height: 100vh;
-    font-family: Arial, Helvetica, sans-serif;
-    background: linear-gradient(160deg, #ffe4f1, #ffd6a5);
-    color: #4a2c17;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 20px;
-    box-sizing: border-box;
-  }
-  h1 { margin: 10px 0; font-size: 40px; }
-  #count { font-size: 32px; font-weight: bold; margin: 10px; }
-  #perSec { font-size: 18px; opacity: 0.8; margin-bottom: 20px; }
-  #donut {
-    width: 220px;
-    height: 220px;
-    border-radius: 50%;
-    background: radial-gradient(circle at 35% 35%, #f9b96b, #d9822b);
-    position: relative;
-    cursor: pointer;
-    user-select: none;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.25);
-    transition: transform 0.08s;
-  }
-  #donut::after {
-    content: "";
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 70px;
-    height: 70px;
-    background: #ffe4f1;
-    border-radius: 50%;
-    transform: translate(-50%, -50%);
-  }
-  #donut.pressed { transform: scale(0.95); }
-  .plus {
-    position: absolute;
-    font-weight: bold;
-    color: #d6336c;
-    pointer-events: none;
-    animation: rise 0.8s ease-out forwards;
-  }
-  @keyframes rise {
-    to { transform: translateY(-80px); opacity: 0; }
-  }
-  #shop {
-    margin-top: 30px;
-    width: 100%;
-    max-width: 420px;
-  }
-  .upgrade {
-    background: #fff;
-    border: none;
-    border-radius: 12px;
-    padding: 12px 16px;
-    margin: 8px 0;
-    width: 100%;
-    font-size: 16px;
-    cursor: pointer;
-    display: flex;
-    justify-content: space-between;
-    box-shadow: 0 3px 8px rgba(0,0,0,0.12);
-  }
-  .upgrade:disabled { opacity: 0.5; cursor: not-allowed; }
-  .upgrade:not(:disabled):hover { background: #fff3e0; }
-  #reset {
-    margin-top: 20px;
-    background: none;
-    border: 1px solid #4a2c17;
-    border-radius: 8px;
-    padding: 6px 12px;
-    cursor: pointer;
-  }
-</style>
+<title>Game Hub</title>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-<h1>Donut Clicker</h1>
-<div id="count">0 donuts</div>
-<div id="perSec">0 donuts per second</div>
-<div id="donut"></div>
+<header>
+  <h1>Game Hub</h1>
+  <p>Pick a game and start playing</p>
+</header>
 
-<div id="shop"></div>
-<button id="reset">Reset progress</button>
+<main class="grid" id="games"></main>
 
 <script>
-const upgrades = [
-  { name: "Sprinkles",       baseCost: 15,    gain: 0.1,  owned: 0 },
-  { name: "Donut Baker",     baseCost: 100,   gain: 1,    owned: 0 },
-  { name: "Donut Shop",      baseCost: 1100,  gain: 8,    owned: 0 },
-  { name: "Donut Factory",   baseCost: 12000, gain: 47,   owned: 0 },
-  { name: "Donut Empire",    baseCost: 130000, gain: 260, owned: 0 }
+const games = [
+  { title: "Donut Clicker",  file: "games/donut-clicker.html",  desc: "Click donuts and buy upgrades.",      icon: "🍩" },
+  { title: "Cyber Moto",     file: "games/cyber-moto.html",     desc: "Ride a neon bike over obstacles.",    icon: "🏍" },
+  { title: "Memory Match",   file: "games/memory-match.html",   desc: "Flip cards and find the pairs.",      icon: "🃏" },
+  { title: "Snake",          file: "games/snake.html",          desc: "Eat, grow, and avoid the walls.",     icon: "🐍" },
+  { title: "Flappy Cube",    file: "games/flappy-cube.html",    desc: "Tap to fly through the gaps.",        icon: "🟦" },
+  { title: "Whack-a-Mole",   file: "games/whack-a-mole.html",   desc: "Hit the moles before they hide.",     icon: "🔨" },
+  { title: "Tic-Tac-Toe",    file: "games/tic-tac-toe.html",    desc: "Beat the computer in three in a row.", icon: "❌" },
+  { title: "Reaction Test",  file: "games/reaction-test.html",  desc: "How fast are your reflexes?",         icon: "⚡" }
 ];
 
-let donuts = 0;
-let clickPower = 1;
-
-const countEl = document.getElementById("count");
-const perSecEl = document.getElementById("perSec");
-const donutEl = document.getElementById("donut");
-const shopEl = document.getElementById("shop");
-
-function costOf(u) {
-  return Math.floor(u.baseCost * Math.pow(1.15, u.owned));
+const container = document.getElementById("games");
+for (const g of games) {
+  const a = document.createElement("a");
+  a.className = "card";
+  a.href = g.file;
+  a.innerHTML = `<div class="icon">${g.icon}</div><h2>${g.title}</h2><p>${g.desc}</p>`;
+  container.appendChild(a);
 }
-
-function donutsPerSecond() {
-  return upgrades.reduce((sum, u) => sum + u.owned * u.gain, 0);
-}
-
-function format(n) {
-  return Math.floor(n).toLocaleString();
-}
-
-function renderShop() {
-  shopEl.innerHTML = "";
-  for (const u of upgrades) {
-    const btn = document.createElement("button");
-    btn.className = "upgrade";
-    btn.disabled = donuts < costOf(u);
-    btn.innerHTML = `<span>${u.name} (x${u.owned})</span><span>${format(costOf(u))}</span>`;
-    btn.onclick = () => buy(u);
-    shopEl.appendChild(btn);
-  }
-}
-
-function render() {
-  countEl.textContent = format(donuts) + " donuts";
-  perSecEl.textContent = donutsPerSecond().toFixed(1) + " donuts per second";
-  const buttons = shopEl.querySelectorAll("button");
-  upgrades.forEach((u, i) => {
-    if (buttons[i]) buttons[i].disabled = donuts < costOf(u);
-  });
-}
-
-function buy(u) {
-  const cost = costOf(u);
-  if (donuts >= cost) {
-    donuts -= cost;
-    u.owned++;
-    renderShop();
-    render();
-    save();
-  }
-}
-
-donutEl.addEventListener("click", e => {
-  donuts += clickPower;
-  donutEl.classList.add("pressed");
-  setTimeout(() => donutEl.classList.remove("pressed"), 80);
-
-  const plus = document.createElement("div");
-  plus.className = "plus";
-  plus.textContent = "+" + clickPower;
-  const rect = donutEl.getBoundingClientRect();
-  plus.style.left = (e.clientX - rect.left) + "px";
-  plus.style.top = (e.clientY - rect.top) + "px";
-  donutEl.appendChild(plus);
-  setTimeout(() => plus.remove(), 800);
-
-  render();
-});
-
-// Passive income, updated 10 times per second
-let last = performance.now();
-function tick(now) {
-  const dt = (now - last) / 1000;
-  last = now;
-  donuts += donutsPerSecond() * dt;
-  render();
-  requestAnimationFrame(tick);
-}
-requestAnimationFrame(tick);
-
-// Save and load with localStorage
-function save() {
-  localStorage.setItem("donutClicker", JSON.stringify({
-    donuts,
-    owned: upgrades.map(u => u.owned)
-  }));
-}
-function load() {
-  const data = JSON.parse(localStorage.getItem("donutClicker") || "null");
-  if (!data) return;
-  donuts = data.donuts || 0;
-  data.owned.forEach((n, i) => upgrades[i].owned = n);
-}
-
-document.getElementById("reset").onclick = () => {
-  if (!confirm("Reset all progress?")) return;
-  localStorage.removeItem("donutClicker");
-  donuts = 0;
-  upgrades.forEach(u => u.owned = 0);
-  renderShop();
-  render();
-};
-
-setInterval(save, 5000);
-window.addEventListener("beforeunload", save);
-
-load();
-renderShop();
-render();
 </script>
 </body>
 </html>
