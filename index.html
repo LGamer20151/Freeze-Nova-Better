@@ -111,7 +111,7 @@ const bonusEl = document.getElementById('bonusDisplay');
 const progressEl = document.getElementById('progressDisplay');
 const lvlButtons = document.querySelectorAll('.lvl-btn');
 
-// --- Synthesized Web Audio (No external MP3s needed) ---
+// --- Synthesized Web Audio ---
 let audioCtx = null;
 let muted = false;
 
@@ -149,7 +149,7 @@ function playFlipBonusSound() {
   playTone(659.25, 'triangle', 0.18, 0.16);
 }
 
-// --- Level Definitions ---
+// --- Level Definitions (Fixed Arrays) ---
 const LEVELS = [
   {
     name: "Level 1: Neon Ramps",
@@ -235,6 +235,9 @@ let floatingTexts = [];
 const keys = {};
 window.addEventListener('keydown', e => {
   initAudio();
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
+    e.preventDefault();
+  }
   keys[e.code] = true;
   if (e.code === 'KeyR') {
     if (state === 'finished') resetLevel(true);
@@ -321,7 +324,6 @@ function addFloatingText(x, y, text, color) {
 }
 
 function update(dt) {
-  // Update particles & floating texts
   particles.forEach(p => {
     p.x += p.vx * dt;
     p.y += p.vy * dt;
@@ -344,5 +346,3 @@ function update(dt) {
   const accel = keys['KeyW'] || keys['ArrowUp'];
   const brake = keys['KeyS'] || keys['ArrowDown'];
   const leanLeft = keys['KeyA'] || keys['ArrowLeft'];
-  const leanRight = keys['KeyD'] || keys['ArrowRight'];
-
