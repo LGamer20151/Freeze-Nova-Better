@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FreezeNova Moto Stunt</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #121622;
+      color: #fff;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      overflow: hidden;
+    }
+    #hud {
+      width: 900px;
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 18px;
+      background: #1c2233;
+      border-radius: 10px 10px 0 0;
+      font-size: 16px;
+      font-weight: bold;
+      border-bottom: 2px solid #2e3752;
+    }
+    .stat span { color: #38bdf8; }
+    .bonus { color: #4ade80 !important; }
+    canvas {
+      background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+      border-radius: 0 0 10px 10px;
+      box-shadow: 0 12px 35px rgba(0, 0, 0, 0.5);
+      display: block;
+    }
+    #controls {
+      margin-top: 10px;
+      font-size: 14px;
+      color: #94a3b8;
+    }
+    kbd {
+      background: #334155;
+      color: #f8fafc;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="hud">
+    <div class="stat">TIME: <span id="timeDisplay">0.0s</span></div>
+    <div class="stat">FLIPS: <span id="flipDisplay">0</span> <span id="bonusDisplay" class="bonus"></span></div>
+    <div class="stat">PROGRESS: <span id="progressDisplay">0%</span></div>
+  </div>
+  <canvas id="gameCanvas" width="900" height="500"></canvas>
+  <div id="controls">
+    <kbd>W</kbd>/<kbd>↑</kbd> Accelerate &nbsp;|&nbsp;
+    <kbd>S</kbd>/<kbd>↓</kbd> Brake &nbsp;|&nbsp;
+    <kbd>A</kbd>/<kbd>←</kbd> Lean Back &nbsp;|&nbsp;
+    <kbd>D</kbd>/<kbd>→</kbd> Lean Forward &nbsp;|&nbsp;
+    <kbd>R</kbd> Restart
+  </div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+const timeEl = document.getElementById('timeDisplay');
+const flipEl = document.getElementById('flipDisplay');
+const bonusEl = document.getElementById('bonusDisplay');
+const progressEl = document.getElementById('progressDisplay');
+
+// Input state
+const keys = {};
+window.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'KeyR') resetGame();
+});
+window.addEventListener('keyup', e => keys[e.code] = false);
+
+// Track geometry (series of connected terrain segments + obstacles)
+const FINISH_X = 6200;
+const terrain = [
+  { x: -300, y: 380 }, { x: 450, y: 380 },
+  { x: 750, y: 310 },  { x: 920, y: 310 },  // Ramp 1 launch
+  { x: 1180, y: 400 }, { x: 1550, y: 400 }, // Ramp 1 landing
+  { x: 1850, y: 270 }, { x: 1960, y: 270 }, // Big jump launch
+  { x: 2320, y: 410 }, { x: 2700, y: 410 }, // Big jump landing
+  { x: 2950, y: 340 }, { x: 3200, y: 420 },
+  { x: 3500, y: 300 }, { x: 3800, y: 300 },
+  { x: 4050, y: 220 }, { x: 4160, y: 220 }, // Mega ramp
+  { x: 4580, y: 410 }, { x: 5000, y: 410 },
+  { x: 5300, y: 320 }, { x: 5600, y: 380 },
+  { x: 6500, y: 380 }
+];
+
+// Hazard blocks (TNT / spikes on track)
+const hazards = [
+  { x: 1030, y: 385, w: 40, h: 30 },
+  { x: 2100, y: 395, w: 60, h: 30 },
+  { x: 4320, y: 395, w: 75, h: 30 }
+];
+
+let bike, startTime, elapsedTime, flips, timeBonus, state, lastAngle, airRotation;
+
+function resetGame() {
+  bike = {
+    x: 120,
+    y: 330,
+    vx: 0,
+    vy: 0,
+    angle: 0,
+    angVel: 0,
+    grounded: false,
+    radius: 16
+  };
+  startTime = performance.now();
+  elapsedTime = 0;
+  flips = 0;
+  timeBonus = 0;
+  airRotation = 0;
+  lastAngle = 0;
+  state = 'playing'; // 'playing', 'crashed', 'finished'
+  bonusEl.textContent = '';
+}
+
+function getTerrainHeight(x) {
+  for (let i = 0; i < terrain.length - 1; i++) {
+    const p1 = terrain[i];
+    const p2 = terrain[i + 1];
+    if (x >= p1.x && x <= p2.x) {
+      const t = (x - p1.x) / (p2.x - p1.x);
+      return {
+        y: p1.y + t * (p2.y - p1.y),
+        slope: Math.atan2(p2.y - p1.y, p2.x - p1.x)
+      };
+    }
+  }
+  return { y: 380, slope: 0 };
+}
+
+function normalizeAngle(a) {
+  while (a > Math.PI) a -= Math.PI * 2;
+  while (a < -Math.PI) a += Math.PI * 2;
+  return a;
+}
+
+function update(dt) {
+  if (state !== 'playing') return;
+
+  elapsedTime = Math.max(0, (performance.now() - startTime) / 1000 - timeBonus);
+
+  const accel = keys['KeyW'] || keys['ArrowUp'];
+  const brake = keys['KeyS'] || keys['ArrowDown'];
+  const leanLeft = keys['KeyA'] || keys['ArrowLeft'];
+  const leanRight = keys['KeyD'] || keys['ArrowRight'];
+
+  // Wheel positions
+  const wheelOffset = 24;
+  const cos = Math.cos(bike.angle);
+  const sin = Math.sin(bike.angle);
+
+  const rearX = bike.x - cos * wheelOffset;
+  const rearY = bike.y - sin * wheelOffset + 12;
+  const frontX = bike.x + cos * wheelOffset;
+  const frontY = bike.y + sin * wheelOffset + 12;
+
+  const rearGround = getTerrainHeight(rearX);
+  const frontGround = getTerrainHeight(frontX);
+  const centerGround = getTerrainHeight(bike.x);
+
+  const rearOnGround = rearY + bike.radius >= rearGround.y;
+  const frontOnGround = frontY + bike.radius >= frontGround.y;
+  bike.grounded = rearOnGround || frontOnGround;
+
+  // Apply gravity
+  bike.vy += 980 * dt;
+
+  if (bike.grounded) {
+    // Check if rider landed upside down (head crash)
+    const norm = Math.abs(normalizeAngle(bike.angle - centerGround.slope));
+    if (norm > Math.PI * 0.58) {
+      state = 'crashed';
+      return;
+    }
+
+    // Complete flip count on clean landing
+    const completedFlips = Math.floor(Math.abs(airRotation) / (Math.PI * 1.75));
+    if (completedFlips > 0) {
+      flips += completedFlips;
+      const saved = completedFlips * 0.5;
+      timeBonus += saved;
+      bonusEl.textContent = `(-${timeBonus.toFixed(1)}s)`;
+    }
+    airRotation = 0;
+
+    // Ground drive & friction
+    if (accel) {
+      bike.vx += Math.cos(centerGround.slope) * 720 * dt;
+    }
+    if (brake) {
+      bike.vx -= Math.cos(centerGround.slope) * 650 * dt;
+    }
+
+    // Slope gravity influence
+    bike.vx += Math.sin(centerGround.slope) * 420 * dt;
+    bike.vx *= 0.985; // rolling drag
+    bike.vx = Math.max(-320, Math.min(760, bike.vx));
+
+    // Align smoothly to terrain slope while allowing slight wheelies
+    const targetSlope = Math.atan2(frontGround.y - rearGround.y, frontX - rearX);
+    let diff = normalizeAngle(targetSlope - bike.angle);
+    bike.angVel = diff * 12;
+
+    if (leanLeft) bike.angVel -= 3.2;
+    if (leanRight) bike.angVel += 3.2;
+
+    // Snap vertical position to ground
+    const avgGroundY = (rearGround.y + frontGround.y) / 2 - 26;
+    if (bike.y > avgGroundY) {
+      bike.y = avgGroundY;
+      bike.vy = Math.min(0, bike.vx * Math.sin(targetSlope));
+    }
+  } else {
+    // Mid-air rotation controls (backflips / frontflips)
+    if (leanLeft) bike.angVel -= 9.5 * dt;
+    if (leanRight) bike.angVel += 9.5 * dt;
+    bike.angVel *= 0.96;
+
+    airRotation += bike.angVel * dt;
+  }
+
+  bike.x += bike.vx * dt;
+  bike.y += bike.vy * dt;
+  bike.angle += bike.angVel * dt;
+
+  // Check hazard collisions
+  for (const h of hazards) {
+    if (
+      bike.x + 18 > h.x &&
+      bike.x - 18 < h.x + h.w &&
+      bike.y + 20 > h.y
+    ) {
+      state = 'crashed';
+      return;
+    }
+  }
+
+  // Check finish line
+  if (bike.x >= FINISH_X) {
+    state = 'finished';
+  }
+
+  // Update HUD
+  timeEl.textContent = `${elapsedTime.toFixed(1)}s`;
+  flipEl.textContent = flips;
+  const pct = Math.min(100, Math.max(0, Math.round((bike.x / FINISH_X) * 100)));
+  progressEl.textContent = `${pct}%`;
+}
+
+function drawBike() {
+  ctx.save();
+  ctx.translate(bike.x, bike.y);
+  ctx.rotate(bike.angle);
+
+  // Wheels
+  const drawWheel = (wx, wy) => {
+    ctx.beginPath();
+    ctx.arc(wx, wy, bike.radius, 0, Math.PI * 2);
+    ctx.fillStyle = '#0f172a';
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.stroke();
+
+    // Rim hub
+    ctx.beginPath();
+    ctx.arc(wx, wy, 5, 0, Math.PI * 2);
+    ctx.fillStyle = '#38bdf8';
+    ctx.fill();
+  };
+
+  drawWheel(-24, 12);
+  drawWheel(24, 12);
+
+  // Motorcycle frame
+  ctx.strokeStyle = '#ef4444';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(-24, 12);
+  ctx.lineTo(-4, -4);
+  ctx.lineTo(16, -6);
+  ctx.lineTo(24, 12);
+  ctx.moveTo(-4, -4);
+  ctx.lineTo(6, 10);
+  ctx.stroke();
+
+  // Rider body & helmet
+  ctx.strokeStyle = '#f8fafc';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(-6, -4);
+  ctx.lineTo(-10, -22);
+  ctx.lineTo(10, -12); // arms to handlebars
+  ctx.stroke();
+
+  // Helmet
+  ctx.beginPath();
+  ctx.arc(-10, -30, 8, 0, Math.PI * 2);
+  ctx.fillStyle = '#38bdf8';
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Camera follows bike horizontally
+  const camX = bike.x - 240;
+
+  ctx.save();
+  ctx.translate(-camX, 0);
+
+  // Draw terrain
+  ctx.beginPath();
+  ctx.moveTo(terrain[0].x, 600);
+  for (const pt of terrain) {
+    ctx.lineTo(pt.x, pt.y);
+  }
+  ctx.lineTo(terrain[terrain.length - 1].x, 600);
+  ctx.closePath();
+  ctx.fillStyle = '#334155';
+  ctx.fill();
+
+  // Track top surface line
+  ctx.beginPath();
+  for (let i = 0; i < terrain.length; i++) {
+    if (i === 0) ctx.moveTo(terrain[i].x, terrain[i].y);
+    else ctx.lineTo(terrain[i].x, terrain[i].y);
+  }
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = '#38bdf8';
+  ctx.stroke();
+
+  // Draw TNT hazards
+  for (const h of hazards) {
+    ctx.fillStyle = '#dc2626';
+    ctx.fillRect(h.x, h.y, h.w, h.h);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.fillText('TNT', h.x + 8, h.y + 19);
+  }
+
+  // Draw Finish Line
+  ctx.fillStyle = '#4ade80';
+  ctx.fillRect(FINISH_X, 220, 10, 160);
+  ctx.font = 'bold 18px sans-serif';
+  ctx.fillText('FINISH', FINISH_X - 24, 210);
+
+  // Draw Bike
+  drawBike();
+
+  ctx.restore();
+
+  // Overlay messages
+  if (state === 'crashed' || state === 'finished') {
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.78)';
