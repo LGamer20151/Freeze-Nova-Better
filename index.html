@@ -41,8 +41,8 @@
 </div>
 <div id="overlay">
   <h1 id="title">CYBER MOTO</h1>
-  <p id="msg1">W / UP = Move forward &nbsp; S / DOWN = Slow down</p>
-  <p id="msg2">A / LEFT = Lean back &nbsp; D / RIGHT = Lean forward (in the air)</p>
+  <p>W / UP = Move forward &nbsp; S / DOWN = Slow down</p>
+  <p>A / LEFT = Lean back &nbsp; D / RIGHT = Lean forward (in the air)</p>
   <p id="msg3">1 / 2 = Choose bike &nbsp; 3 / 4 / 5 = Choose level &nbsp; ENTER or SPACE to start</p>
 </div>
 
@@ -321,12 +321,13 @@ function drawTerrain() {
   }
   ctx.lineTo(W, H);
   ctx.closePath();
-  ctx.fillStyle = "#12002a";
+  ctx.fillStyle = "#14062a";
   ctx.fill();
+
   ctx.strokeStyle = "#0ff";
+  ctx.lineWidth = 2;
   ctx.shadowColor = "#0ff";
   ctx.shadowBlur = 12;
-  ctx.lineWidth = 3;
   ctx.beginPath();
   for (let sx = 0; sx <= W; sx += 8) {
     const y = groundY(sx + camX);
@@ -360,29 +361,20 @@ function drawObstacles() {
 
 function drawBike() {
   if (!bike) return;
-  const sx = bike.x - camX;
   ctx.save();
-  ctx.translate(sx, bike.y);
+  ctx.translate(bike.x - camX, bike.y);
   ctx.rotate(bike.angle);
   ctx.shadowColor = bike.color;
   ctx.shadowBlur = 15;
   ctx.strokeStyle = bike.color;
   ctx.lineWidth = 3;
-  // Wheels
   ctx.beginPath();
   ctx.arc(-25, 12, bike.wheelR, 0, Math.PI * 2);
   ctx.arc(25, 12, bike.wheelR, 0, Math.PI * 2);
   ctx.stroke();
-  // Body and rider
-  ctx.beginPath();
-  ctx.moveTo(-25, 12); ctx.lineTo(0, -4); ctx.lineTo(25, 12);
-  ctx.moveTo(0, -4); ctx.lineTo(8, -24);
-  ctx.stroke();
   ctx.fillStyle = bike.color;
-  ctx.beginPath();
-  ctx.arc(10, -32, 7, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.shadowBlur = 0;
+  ctx.fillRect(-30, -4, 60, 8);
+  ctx.fillRect(-4, -20, 8, 20);
   ctx.restore();
 }
 
@@ -395,24 +387,17 @@ function drawParticles() {
   ctx.globalAlpha = 1;
 }
 
-function drawFinishLine() {
-  const lv = levels[currentLevel];
-  const sx = lv.length - camX;
-  if (sx < -50 || sx > W + 50) return;
-  ctx.fillStyle = "#0ff";
-  ctx.shadowColor = "#0ff";
-  ctx.shadowBlur = 20;
-  ctx.fillRect(sx, 0, 6, H);
-  ctx.shadowBlur = 0;
-}
-
 function draw() {
+  ctx.clearRect(0, 0, W, H);
   drawBackground();
-  drawTerrain();
-  drawFinishLine();
-  drawObstacles();
-  drawParticles();
-  drawBike();
+  if (state !== "menu") {
+    drawTerrain();
+    drawObstacles();
+    drawParticles();
+    drawBike();
+  }
+  distEl.textContent = Math.floor(distance);
+  bestEl.textContent = Math.floor(best);
 }
 
 // ---------- Main loop ----------
@@ -421,7 +406,6 @@ function loop(now) {
   const dt = Math.min(0.033, (now - lastTime) / 1000);
   lastTime = now;
   update(dt);
-  ctx.clearRect(0, 0, W, H);
   draw();
   requestAnimationFrame(loop);
 }
