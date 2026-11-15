@@ -49,11 +49,12 @@
 </head>
 <body>
 <canvas id="game"></canvas>
-<div id="hud">DISTANCE: <span id="dist">0</span> m &nbsp; BEST: <span id="best">0</span> m</div>
+<div id="hud">DISTANCE: <span id="dist">0</span> m &nbsp; BEST: <span id="best">0</span> m &nbsp; LEVEL: <span id="lvl">1</span> &nbsp; BIKE: <span id="bikeName">1</span></div>
 <div id="overlay">
   <h1>CYBER MOTO</h1>
-  <p>RIGHT / D = Throttle &nbsp; LEFT / A = Brake &nbsp; UP / W = Lean forward &nbsp; DOWN / S = Lean back</p>
-  <p>Press ENTER or SPACE to start</p>
+  <p>D / RIGHT = Throttle &nbsp; A / LEFT = Brake &nbsp; W / UP = Accelerate &nbsp; S / DOWN = Decelerate</p>
+  <p>Hold W or S to move. Hold A or D to lean (or use arrow keys).</p>
+  <p>1 / 2 = Choose bike &nbsp; ENTER or SPACE to start</p>
 </div>
 
 <script>
@@ -62,120 +63,130 @@ const ctx = canvas.getContext("2d");
 const overlay = document.getElementById("overlay");
 const distEl = document.getElementById("dist");
 const bestEl = document.getElementById("best");
+const lvlEl = document.getElementById("lvl");
+const bikeEl = document.getElementById("bikeName");
 
 let W, H;
 function resize() {
   W = canvas.width = window.innerWidth;
   H = canvas.height = window.innerHeight;
+  makeStars();
 }
 window.addEventListener("resize", resize);
-resize();
 
 // ---------- Input ----------
 const keys = {};
 window.addEventListener("keydown", e => {
   keys[e.code] = true;
   if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space"].includes(e.code)) e.preventDefault();
-  if ((e.code === "Enter" || e.code === "Space") && state === "menu") startGame();
+  if (state === "menu") {
+    if (e.code === "Digit1") selectedBike = 0;
+    if (e.code === "Digit2") selectedBike = 1;
+    if (e.code === "Enter" || e.code === "Space") startGame();
+  }
   if (e.code === "KeyR" && state === "dead") startGame();
 });
 window.addEventListener("keyup", e => keys[e.code] = false);
 
+// Controls:
+// W / Up = accelerate (move forward), S / Down = decelerate
+// D / Right = lean forward (nose down), A / Left = lean back (nose up)
 const input = {
-  throttle: () => keys.ArrowRight || keys.KeyD,
-  brake:    () => keys.ArrowLeft || keys.KeyA,
-  leanFwd:  () => keys.KeyW,
-  leanBack: () => keys.KeyS,
-  accelerate: () => keys.KeyW,
-  decelerate: () => keys.KeyS
+  accelerate: () => keys.KeyW || keys.ArrowUp,
+  decelerate: () => keys.KeyS || keys.ArrowDown,
+  leanFwd:    () => keys.KeyD || keys.ArrowRight,
+  leanBack:   () => keys.KeyA || keys.ArrowLeft
 };
 
-// ---------- Game state ----------
+// ---------- Game constants ----------
+const GRAVITY = 1800;
+const START_X = 200;
+
+// ---------- Levels ----------
+const levels = [
+  { name: "1", difficulty: 0.5, length: 4000, obstacleGap: 900, bumpiness: 0.6 },
+  { name: "2", difficulty: 0.7, length: 6000, obstacleGap: 650, bumpiness: 1.0 },
+  { name: "3", difficulty: 1.0, length: 8000, obstacleGap: 450, bumpiness: 1.4 }
+];
+let currentLevel = 0;
+
+// ---------- Bikes ----------
+const bikes = [
+  { name: "NEON RUNNER", speed: 900, accel: 520, handling: 0.9, color: "#0ff" },
+  { name: "VOLT STRIKER", speed: 800, accel: 600, handling: 1.1, color: "#f0f" }
+];
+let selectedBike = 0;
+
+// ---------- State ----------
 let state = "menu";
 let best = 0;
 let distance = 0;
 let camX = 0;
-const GRAVITY = 1800;
-const GROUND_SEG = 40;
-let terrain = [];
 let particles = [];
 let stars = [];
+let obstacles = [];
 let bike;
+let lastTime = performance.now();
 
-// Levels
-const levels = [
-  { difficulty: 0.5, obstacles: [] }, // Level 1
-  { difficulty: 0.7, obstacles: [] }, // Level 2
-  { difficulty: 1.0, obstacles: [] }  // Level 3
-];
-
-let currentLevel = 0;
-
-function getLevelDifficulty() {
-  return levels[currentLevel].difficulty;
+// ---------- Terrain ----------
+function groundY(x) {
+  const lv = levels[currentLevel];
+  const base = H * 0.72;
+  const d = lv.difficulty;
+  return base
+    - Math.sin(x * 0.0018) * 60 * lv.bumpiness
+    - Math.sin(x * 0.0051 + 1.3) * 30 * (0.5 + d)
+    - Math.sin(x * 0.011) * 10 * d;
 }
 
-function loadLevel(levelIndex) {
-  currentLevel = levelIndex;
+function makeStars() {
+  stars = [];
+  for (let i = 0; i < 120; i++) {
+    stars.push({ x: Math.random() * W, y: Math.random() * H * 0.6, s: Math.random() * 1.5 + 0.5 });
+  }
+}
+
+// ---------- Obstacles ----------
+function loadLevel(index) {
+  currentLevel = index;
   obstacles = [];
-  // Load new obstacles for the current level
-  // Example: addObstacle(1000, 'barrier');
-}
-
-// Bikes
-const bikes = [
-  { speed: 900, handling: 0.9, color: "#0ff" }, // Bike 1
-  { speed: 800, handling: 1.1, color: "#f0f" }  // Bike 2
-];
-
-let selectedBike = 0;
-
-function newBike() {
-  const bikeConfig = bikes[selectedBike];
-  return {
-    x: 200,
-    y: 0,
-    vx: 0,
-    vy: 0,
-    angle: 0,
-    angVel: 0,
-    wheelR: 22,
-    wheelAngle: 0,
-    onGround: false,
-    crashed: false,
-    crashTimer: 0,
-    speed: bikeConfig.speed,
-    handling: bikeConfig.handling,
-    color: bikeConfig.color
-  };
-}
-
-// Obstacles
-const obstacles = [];
-
-function addObstacle(x, type) {
-  obstacles.push({ x, type });
+  const lv = levels[index];
+  for (let x = START_X + 600; x < lv.length; x += lv.obstacleGap + Math.random() * 300) {
+    const type = Math.random() < 0.5 ? "barrier" : "spike";
+    obstacles.push({ x, type, w: type === "barrier" ? 50 : 40, h: type === "barrier" ? 50 : 30 });
+  }
 }
 
 function drawObstacles() {
   for (const obs of obstacles) {
-    ctx.fillStyle = "#ff0000";
-    ctx.fillRect(obs.x - camX, groundY(obs.x) - 50, 50, 50); // Example obstacle
-  }
-}
-
-function updateObstacles(dt) {
-  for (const obs of obstacles) {
-    obs.x -= bike.vx * dt / 10; // Move obstacles with the bike
-    if (obs.x + 50 < 0) {
-      obs.x = W + 50; // Reset obstacle to the other side
+    const sx = obs.x - camX;
+    if (sx < -100 || sx > W + 100) continue;
+    const gy = groundY(obs.x);
+    ctx.fillStyle = obs.type === "barrier" ? "#ff0040" : "#ff0";
+    ctx.shadowColor = ctx.fillStyle;
+    ctx.shadowBlur = 15;
+    if (obs.type === "barrier") {
+      ctx.fillRect(sx, gy - obs.h, obs.w, obs.h);
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(sx, gy);
+      ctx.lineTo(sx + obs.w / 2, gy - obs.h);
+      ctx.lineTo(sx + obs.w, gy);
+      ctx.closePath();
+      ctx.fill();
     }
+    ctx.shadowBlur = 0;
   }
 }
 
 function checkObstacleCollision() {
   for (const obs of obstacles) {
-    if (bike.x < obs.x + 50 && bike.x + 50 > obs.x && bike.y < groundY(obs.x) + 50) {
+    const gy = groundY(obs.x);
+    const top = gy - obs.h;
+    // Bike body box (approximate)
+    const bx1 = bike.x - 40, bx2 = bike.x + 40;
+    const by1 = bike.y - 12, by2 = bike.y + 14;
+    if (bx2 > obs.x && bx1 < obs.x + obs.w && by2 > top && by1 < gy) {
       crash();
       return;
     }
@@ -183,6 +194,31 @@ function checkObstacleCollision() {
 }
 
 // ---------- Update ----------
+function startGame() {
+  overlay.classList.add("hidden");
+  state = "play";
+  distance = 0;
+  camX = 0;
+  particles = [];
+  bike = newBike();
+  bike.y = groundY(bike.x) - bike.wheelR;
+  loadLevel(currentLevel);
+  bikeEl.textContent = bikes[selectedBike].name;
+  lvlEl.textContent = levels[currentLevel].name;
+}
+
+function newBike() {
+  const cfg = bikes[selectedBike];
+  return {
+    x: START_X, y: 0, vx: 0, vy: 0,
+    angle: 0, angVel: 0,
+    wheelR: 22, wheelAngle: 0,
+    onGround: false, crashed: false, crashTimer: 0,
+    speed: cfg.speed, accel: cfg.accel,
+    handling: cfg.handling, color: cfg.color
+  };
+}
+
 function update(dt) {
   if (state !== "play") return;
 
@@ -200,22 +236,30 @@ function update(dt) {
     return;
   }
 
-  const difficulty = getLevelDifficulty();
-  const accel = input.throttle() ? 1 : 0;
-  const brake = input.brake() ? 1 : 0;
-  let accelForce = accel * 520 - brake * 380 - bike.vx * 0.15;
-  if (!bike.onGround) accelForce *= 0.2;
-  bike.vx += accelForce * dt;
+  const lv = levels[currentLevel];
+
+  // W / S: move forward or slow down
+  let force = 0;
+  if (input.accelerate()) force += bike.accel;
+  if (input.decelerate()) force -= 380;
+  force -= bike.vx * 0.15;
+  if (!bike.onGround) force *= 0.2;
+  bike.vx += force * dt;
   bike.vx = Math.max(0, Math.min(bike.vx, bike.speed));
 
-  if (input.leanFwd()) bike.angVel += 6 * dt;
-  if (input.leanBack()) bike.angVel -= 6 * dt;
+  // A / D: lean (only in the air, for balance)
+  if (!bike.onGround) {
+    if (input.leanFwd()) bike.angVel += 6 * dt;
+    if (input.leanBack()) bike.angVel -= 6 * dt;
+  }
 
-  bike.vy += GRAVITY * dt * difficulty;
+  bike.vy += GRAVITY * dt * lv.difficulty;
   bike.x += bike.vx * dt;
   bike.y += bike.vy * dt;
-  distance = Math.max(distance, (bike.x - 200) / 10);
+  distance = Math.max(distance, (bike.x - START_X) / 10);
+  distEl.textContent = Math.floor(distance);
 
+  // Ground collision
   const gy = groundY(bike.x) - bike.wheelR;
   const slope = (groundY(bike.x + 4) - groundY(bike.x - 4)) / 8;
   bike.onGround = false;
@@ -224,10 +268,7 @@ function update(dt) {
     bike.y = gy;
     bike.vy = 0;
     bike.onGround = true;
-    if (impact > 700 && Math.abs(bike.angle) > 0.9) {
-      crash();
-      return;
-    }
+    if (impact > 700 && Math.abs(bike.angle) > 0.9) { crash(); return; }
     if (impact > 500) spawnSparks(bike.x, bike.y + bike.wheelR, 14);
     bike.angVel += (Math.atan(slope) - bike.angle) * 0.2 * bike.handling;
     bike.angVel *= 0.6;
@@ -237,21 +278,32 @@ function update(dt) {
 
   bike.angle += bike.angVel * dt;
   bike.angVel *= 0.99;
-  if (Math.abs(bike.angle) > 1.6) {
-    crash();
-    return;
-  }
-
+  if (Math.abs(bike.angle) > 1.6) { crash(); return; }
   if (bike.onGround) bike.angle *= 0.9;
   bike.wheelAngle += bike.vx * dt / bike.wheelR;
 
-  if (bike.onGround && input.throttle() && Math.random() < 0.6) {
-    particles.push({ x: bike.x - 30, y: bike.y + 8, vx: -60 - Math.random() * 60, vy: -20 + Math.random() * -30, life: 0.5, col: bike.color });
+  // Exhaust
+  if (bike.onGround && input.accelerate() && Math.random() < 0.6) {
+    particles.push({ x: bike.x - 30, y: bike.y + 8, vx: -60 - Math.random() * 60, vy: -20 - Math.random() * 30, life: 0.5, col: bike.color });
   }
 
   updateParticles(dt);
-  updateObstacles(dt);
   checkObstacleCollision();
+  if (state !== "play") return;
+
+  // Level progression
+  if (distance * 10 + START_X >= lv.length) {
+    if (currentLevel < levels.length - 1) {
+      loadLevel(currentLevel + 1);
+      lvlEl.textContent = levels[currentLevel].name;
+    } else {
+      state = "dead";
+      overlay.classList.remove("hidden");
+      overlay.querySelector("h1").textContent = "MISSION COMPLETE";
+      overlay.querySelector("p:last-child").textContent = "Press R to play again";
+    }
+  }
+
   camX = bike.x - W * 0.3;
 }
 
@@ -301,81 +353,124 @@ function drawBackground() {
     ctx.fillRect(x, s.y, s.s, s.s);
   }
   ctx.globalAlpha = 1;
+
+  // Neon horizon grid
+  ctx.strokeStyle = "rgba(255,0,255,0.25)";
+  ctx.lineWidth = 1;
+  const horizon = H * 0.55;
+  for (let y = horizon; y < H; y += 30) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(W, y);
+    ctx.stroke();
+  }
+  for (let x = -((camX * 0.5) % 80); x < W; x += 80) {
+    ctx.beginPath();
+    ctx.moveTo(x, horizon);
+    ctx.lineTo(x - 200, H);
+    ctx.stroke();
+  }
+}
+
+function drawTerrain() {
+  ctx.beginPath();
+  ctx.moveTo(0, H);
+  for (let sx = 0; sx <= W; sx += 8) {
+    ctx.lineTo(sx, groundY(sx + camX));
+  }
+  ctx.lineTo(W, H);
+  ctx.closePath();
+  ctx.fillStyle = "#12002b";
+  ctx.fill();
+
+  ctx.shadowColor = "#0ff";
+  ctx.shadowBlur = 12;
+  ctx.strokeStyle = "#0ff";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let sx = 0; sx <= W; sx += 8) {
+    const y = groundY(sx + camX);
+    if (sx === 0) ctx.moveTo(sx, y); else ctx.lineTo(sx, y);
+  }
+  ctx.stroke();
+  ctx.shadowBlur = 0;
 }
 
 function drawBike() {
+  if (!bike) return;
+  const x = bike.x - camX;
+  const y = bike.y;
   ctx.save();
-  ctx.translate(bike.x - camX, bike.y);
+  ctx.translate(x, y);
   ctx.rotate(bike.angle);
+  ctx.shadowColor = bike.color;
+  ctx.shadowBlur = 15;
+  ctx.strokeStyle = bike.color;
+  ctx.lineWidth = 3;
+
+  // Wheels
+  const wr = bike.wheelR;
+  for (const wx of [-26, 26]) {
+    ctx.beginPath();
+    ctx.arc(wx, wr - bike.wheelR, wr, 0, Math.PI * 2);
+    ctx.stroke();
+    // Spokes spin with the wheel angle
+    ctx.beginPath();
+    ctx.moveTo(wx, 0);
+    ctx.lineTo(wx + Math.cos(bike.wheelAngle) * wr, Math.sin(bike.wheelAngle) * wr);
+    ctx.stroke();
+  }
+
+  // Frame and rider
   ctx.fillStyle = bike.color;
-  ctx.fillRect(-40, -10, 80, 20); // Bike body
-  ctx.fillRect(-10, 10, 20, -30); // Bike wheel
+  ctx.beginPath();
+  ctx.moveTo(-26, 0);
+  ctx.lineTo(0, -18);
+  ctx.lineTo(26, 0);
+  ctx.stroke();
+  ctx.fillRect(-6, -34, 12, 16);
+  ctx.beginPath();
+  ctx.arc(0, -40, 6, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.shadowBlur = 0;
   ctx.restore();
 }
 
 function drawParticles() {
   for (const p of particles) {
     ctx.fillStyle = p.col;
-    ctx.globalAlpha = p.life;
+    ctx.globalAlpha = Math.max(0, p.life);
     ctx.fillRect(p.x - camX, p.y, 4, 4);
   }
   ctx.globalAlpha = 1;
 }
 
+function drawHUD() {
+  // HUD is handled by the DOM element at the top
+}
+
 function draw() {
   ctx.clearRect(0, 0, W, H);
   drawBackground();
-  drawBike();
+  drawTerrain();
   drawObstacles();
+  drawBike();
   drawParticles();
   drawHUD();
 }
 
-function drawHUD() {
-  distEl.textContent = Math.floor(distance);
-}
-
-function startGame() {
-  overlay.classList.add("hidden");
-  state = "play";
-  distance = 0;
-  camX = 0;
-  particles = [];
-  bike = newBike();
-  bike.y = groundY(bike.x) - bike.wheelR;
-  makeStars();
-  loadLevel(0); // Start at level 0
-}
-
-// Procedural terrain: heights generated on demand
-function groundY(x) {
-  const difficulty = Math.min(1, distance / 5000);
-  const base = H * 0.72;
-  return base
-    - Math.sin(x * 0.0018) * 60
-    - Math.sin(x * 0.0051 + 1.3) * 30 * (0.5 + difficulty)
-    - Math.sin(x * 0.011) * 10 * difficulty;
-}
-
-function makeStars() {
-  stars = [];
-  for (let i = 0; i < 120; i++) {
-    stars.push({ x: Math.random() * W, y: Math.random() * H * 0.6, s: Math.random() * 1.5 + 0.5 });
-  }
-}
-
-function gameLoop(timestamp) {
-  let dt = (timestamp - lastTime) / 1000;
-  lastTime = timestamp;
-
+// ---------- Main loop ----------
+function loop(now) {
+  const dt = Math.min(0.033, (now - lastTime) / 1000);
+  lastTime = now;
   update(dt);
   draw();
-
-  requestAnimationFrame(gameLoop);
+  requestAnimationFrame(loop);
 }
 
-let lastTime = 0;
-requestAnimationFrame(gameLoop);
+resize();
+requestAnimationFrame(loop);
 </script>
 </body>
 </html>
