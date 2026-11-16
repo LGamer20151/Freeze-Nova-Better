@@ -31,18 +31,14 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
 let player = {
-  x: canvas.width / 2,
+  x: canvas.width / 2 - 25,
   y: canvas.height - 30,
   width: 50,
   height: 20,
   speed: 5
 };
 
-let keys = {
-  right: false,
-  left: false
-};
-
+let bullets = [];
 let invaders = [];
 const rows = 4;
 const cols = 11;
@@ -50,6 +46,8 @@ const invaderSize = 20;
 const invaderGap = 15;
 const invaderRowGap = 30;
 const invaderColGap = 20;
+let direction = 1;
+let moveDown = false;
 
 for (let i = 0; i < rows; i++) {
   invaders[i] = [];
@@ -80,6 +78,13 @@ function drawInvaders() {
   });
 }
 
+function drawBullets() {
+  bullets.forEach(bullet => {
+    ctx.fillStyle = '#f0f';
+    ctx.fillRect(bullet.x, bullet.y, 5, 10);
+  });
+}
+
 function clearCanvas() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 }
@@ -93,16 +98,81 @@ function updatePlayer() {
   }
 }
 
+function updateBullets() {
+  bullets = bullets.filter(bullet => bullet.y > 0);
+  bullets.forEach(bullet => {
+    bullet.y -= 5;
+  });
+}
+
+function updateInvaders() {
+  const rightEdge = invaders[0].some(invader => invader.x + invader.width >= canvas.width);
+  const leftEdge = invaders[0].some(invader => invader.x <= 0);
+
+  if (rightEdge || leftEdge) {
+    direction *= -1;
+    moveDown = true;
+  }
+
+  if (moveDown) {
+    invaders.forEach(row => row.forEach(invader => invader.y += 10));
+    moveDown = false;
+  }
+
+  invaders.forEach(row => {
+    row.forEach(invader => {
+      if (invader.alive) {
+        invader.x += direction * 2;
+      }
+    });
+  });
+}
+
+function checkCollisions() {
+  bullets.forEach((bullet, bulletIndex) => {
+    invaders.forEach(row => {
+      row.forEach(invader => {
+        if (invader.alive && bullet.x < invader.x + invader.width &&
+            bullet.x + 5 > invader.x &&
+            bullet.y < invader.y + invader.height &&
+            bullet.y + 10 > invader.y) {
+          invader.alive = false;
+          bullets.splice(bulletIndex, 1);
+        }
+      });
+    });
+  });
+
+  invaders.forEach(row => {
+    row.forEach(invader => {
+      if (invader.alive && player.x < invader.x + invader.width &&
+          player.x + player.width > invader.x &&
+          player.y < invader.y + invader.height &&
+          player.y + player.height > invader.y) {
+        alert("Game Over!");
+        document.location.reload();
+      }
+    });
+  });
+}
+
 function updateGame() {
   clearCanvas();
   drawPlayer();
   drawInvaders();
+  drawBullets();
   updatePlayer();
+  updateBullets();
+  updateInvaders();
+  checkCollisions();
 }
 
 function keyDownHandler(e) {
   if (e.key === 'ArrowRight') keys.right = true;
   if (e.key === 'ArrowLeft') keys.left = true;
+  if (e.key === ' ') {
+    bullets.push({ x: player.x + player.width / 2 - 2.5, y: player.y });
+  }
 }
 
 function keyUpHandler(e) {
@@ -112,6 +182,8 @@ function keyUpHandler(e) {
 
 document.addEventListener('keydown', keyDownHandler);
 document.addEventListener('keyup', keyUpHandler);
+
+let keys = { right: false, left: false };
 
 function gameLoop() {
   updateGame();
