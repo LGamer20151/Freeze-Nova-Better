@@ -67,22 +67,18 @@ function createPipe() {
 }
 
 function draw() {
-  // Clear
   ctx.fillStyle = "#05020f";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Draw Flappy
   ctx.fillStyle = "#0ff";
   ctx.fillRect(flappy.x, flappy.y, flappy.width, flappy.height);
 
-  // Draw Pipes
   pipes.forEach(pipe => {
     ctx.fillStyle = "#f0f";
     ctx.fillRect(pipe.bottom.x, pipe.bottom.y, pipe.bottom.width, pipe.bottom.height);
     ctx.fillRect(pipe.top.x, pipe.top.y, pipe.top.width, pipe.top.height);
   });
 
-  // Draw Score
   ctx.fillStyle = "#fff";
   ctx.font = "24px Arial";
   ctx.fillText("Score: " + score, 10, 30);
@@ -92,20 +88,18 @@ function update() {
   velocity += gravity;
   flappy.y += velocity;
 
-  // Collision with ground
   if (flappy.y + flappy.height >= canvas.height) {
     gameOver();
     return;
   }
 
-  // Move and draw pipes
   pipes.forEach(pipe => {
     pipe.bottom.x -= 2;
     pipe.top.x -= 2;
   });
+
   pipes = pipes.filter(pipe => pipe.bottom.x + pipe.bottom.width > 0);
 
-  // Pipe collision
   pipes.forEach(pipe => {
     if (flappy.x < pipe.bottom.x + pipe.bottom.width && flappy.x + flappy.width > pipe.bottom.x &&
         (flappy.y < pipe.bottom.y + pipe.bottom.height || flappy.y + flappy.height > pipe.top.y)) {
@@ -113,7 +107,6 @@ function update() {
     }
   });
 
-  // Score
   if (pipes[0].bottom.x + pipes[0].bottom.width < flappy.x + flappy.width && !pipes[0].scored) {
     score++;
     scoreEl.textContent = "Score: " + score;
