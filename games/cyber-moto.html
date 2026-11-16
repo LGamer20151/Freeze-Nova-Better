@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cyber Moto Game</title>
+<title>Cyber Moto X3M</title>
 <style>
   body {
     margin: 0;
@@ -23,7 +23,7 @@
 </head>
 <body>
 <a class="back" href="../index.html">Back to Hub</a>
-<h1>Cyber Moto</h1>
+<h1>Cyber Moto X3M</h1>
 <canvas id="gameCanvas" width="800" height="600"></canvas>
 
 <script>
@@ -35,17 +35,23 @@ let moto = {
   y: canvas.height - 100,
   width: 50,
   height: 20,
-  speed: 5,
-  angle: 0
+  speed: 0,
+  maxSpeed: 5,
+  acceleration: 0.1,
+  brake: 0.2,
+  angle: 0,
+  flipCount: 0,
+  flipLimit: 2
 };
 
 let keys = {
   right: false,
   left: false,
-  up: false
+  up: false,
+  down: false
 };
 
-let obstacles = [];
+const obstacles = [];
 const obstacleCount = 5;
 
 for (let i = 0; i < obstacleCount; i++) {
@@ -78,6 +84,15 @@ function clearCanvas() {
 }
 
 function updateMoto() {
+  if (keys.up) {
+    moto.speed += moto.acceleration;
+    if (moto.speed > moto.maxSpeed) moto.speed = moto.maxSpeed;
+  }
+  if (keys.down) {
+    moto.speed -= moto.brake;
+    if (moto.speed < 0) moto.speed = 0;
+  }
+
   if (keys.left && moto.x > 0) {
     moto.x -= moto.speed;
     moto.angle = -0.1;
@@ -86,11 +101,24 @@ function updateMoto() {
     moto.x += moto.speed;
     moto.angle = 0.1;
   }
-  if (keys.up && moto.y > 0) {
-    moto.y -= moto.speed;
-  }
+
   if (!keys.left && !keys.right) {
     moto.angle = 0;
+  }
+
+  if (moto.flipCount < moto.flipLimit) {
+    if (keys.left) {
+      moto.y -= 10;
+      moto.flipCount++;
+    }
+    if (keys.right) {
+      moto.y -= 10;
+      moto.flipCount++;
+    }
+  }
+
+  if (moto.flipCount >= moto.flipLimit) {
+    moto.flipCount = 0;
   }
 }
 
@@ -120,12 +148,14 @@ function keyDownHandler(e) {
   if (e.key === 'ArrowRight') keys.right = true;
   if (e.key === 'ArrowLeft') keys.left = true;
   if (e.key === 'ArrowUp') keys.up = true;
+  if (e.key === 'ArrowDown') keys.down = true;
 }
 
 function keyUpHandler(e) {
   if (e.key === 'ArrowRight') keys.right = false;
   if (e.key === 'ArrowLeft') keys.left = false;
   if (e.key === 'ArrowUp') keys.up = false;
+  if (e.key === 'ArrowDown') keys.down = false;
 }
 
 document.addEventListener('keydown', keyDownHandler);
