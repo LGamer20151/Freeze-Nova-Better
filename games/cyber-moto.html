@@ -3,143 +3,140 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cyber Moto</title>
+<title>Cyber Moto Game</title>
 <style>
   body {
     margin: 0;
-    min-height: 100vh;
-    font-family: Arial, Helvetica, sans-serif;
     background: radial-gradient(circle at top, #1a0b2e, #05020f);
-    color: #fff;
+    color: #0ff;
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 20px;
-    box-sizing: border-box;
+    justify-content: center;
+    height: 100vh;
+    font-family: Arial, Helvetica, sans-serif;
   }
-  a.back { color: #0ff; text-decoration: none; align-self: flex-start; }
-  h1 { color: #0ff; text-shadow: 0 0 15px #0ff; margin: 10px 0; }
-  #score { font-size: 24px; margin-bottom: 10px; }
-  canvas {
-    border: 2px solid #0ff;
-    box-shadow: 0 0 20px rgba(0, 255, 255, 0.2);
-    background: #05020f;
-  }
-  button {
-    margin-top: 20px;
-    padding: 10px 20px;
-    font-size: 16px;
-    background: #f0f;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    color: #05020f;
-    font-weight: bold;
-  }
+  canvas { border: 1px solid #0ff; }
+  a.back { color: #0ff; text-decoration: none; margin-top: 10px; }
+  h1 { color: #0ff; text-shadow: 0 0 15px #0ff; }
 </style>
 </head>
 <body>
 <a class="back" href="../index.html">Back to Hub</a>
 <h1>Cyber Moto</h1>
-<div id="score">Score: 0</div>
-<canvas id="game" width="400" height="400"></canvas>
-<button id="restart">New Game</button>
+<canvas id="gameCanvas" width="800" height="600"></canvas>
 
 <script>
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
-const scoreEl = document.getElementById("score");
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
 
-const moto = { x: 50, y: 300, width: 20, height: 20, speed: 5 };
-const obstacles = [];
-let score = 0;
-let gameInterval;
-let level = 1;
+let moto = {
+  x: canvas.width / 2,
+  y: canvas.height - 100,
+  width: 50,
+  height: 20,
+  speed: 5,
+  angle: 0
+};
 
-function createObstacle() {
-  const minHeight = 50;
-  const maxHeight = canvas.height - 100;
-  const height = Math.random() * (maxHeight - minHeight) + minHeight;
-  return { x: canvas.width, y: canvas.height - height, width: 20, height: height };
+let keys = {
+  right: false,
+  left: false,
+  up: false
+};
+
+let obstacles = [];
+const obstacleCount = 5;
+
+for (let i = 0; i < obstacleCount; i++) {
+  obstacles.push({
+    x: Math.random() * (canvas.width - 30),
+    y: Math.random() * (canvas.height / 2),
+    width: 30,
+    height: 30
+  });
 }
 
-function draw() {
-  // Clear
-  ctx.fillStyle = "#05020f";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  // Draw Moto
-  ctx.fillStyle = "#0ff";
-  ctx.fillRect(moto.x, moto.y, moto.width, moto.height);
-
-  // Draw Obstacles
-  ctx.fillStyle = "#f0f";
-  obstacles.forEach(obstacle => ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height));
-
-  // Draw Score
-  ctx.fillStyle = "#fff";
-  ctx.font = "24px Arial";
-  ctx.fillText("Score: " + score, 10, 30);
+function drawMoto() {
+  ctx.save();
+  ctx.translate(moto.x, moto.y);
+  ctx.rotate(moto.angle);
+  ctx.fillStyle = '#0ff';
+  ctx.fillRect(-moto.width / 2, -moto.height / 2, moto.width, moto.height);
+  ctx.restore();
 }
 
-function update() {
-  // Move Moto
-  if (moto.y >= 0 && moto.y <= canvas.height - moto.height) {
-    const move = (e) => {
-      if (e.key === "ArrowUp") moto.y -= moto.speed;
-      if (e.key === "ArrowDown") moto.y += moto.speed;
-    };
-    window.addEventListener("keydown", move);
-  }
-
-  // Move Obstacles
-  obstacles.forEach(obstacle => obstacle.x -= 3 + level);
-
-  // Check for Collision
+function drawObstacles() {
+  ctx.fillStyle = '#f0f';
   obstacles.forEach(obstacle => {
-    if (moto.x < obstacle.x + obstacle.width &&
-        moto.x + moto.width > obstacle.x &&
-        moto.y < obstacle.y + obstacle.height &&
-        moto.y + moto.height > obstacle.y) {
-      gameOver();
-      return;
+    ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+  });
+}
+
+function clearCanvas() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function updateMoto() {
+  if (keys.left && moto.x > 0) {
+    moto.x -= moto.speed;
+    moto.angle = -0.1;
+  }
+  if (keys.right && moto.x < canvas.width - moto.width) {
+    moto.x += moto.speed;
+    moto.angle = 0.1;
+  }
+  if (keys.up && moto.y > 0) {
+    moto.y -= moto.speed;
+  }
+  if (!keys.left && !keys.right) {
+    moto.angle = 0;
+  }
+}
+
+function checkCollision() {
+  obstacles.forEach(obstacle => {
+    if (
+      moto.x < obstacle.x + obstacle.width &&
+      moto.x + moto.width > obstacle.x &&
+      moto.y < obstacle.y + obstacle.height &&
+      moto.y + moto.height > obstacle.y
+    ) {
+      alert("Game Over!");
+      document.location.reload();
     }
   });
-
-  // Remove Passed Obstacles
-  obstacles = obstacles.filter(obstacle => obstacle.x + obstacle.width > 0);
-
-  // Add New Obstacle
-  if (obstacles.length === 0 || obstacles[obstacles.length - 1].x < canvas.width - 200) {
-    obstacles.push(createObstacle());
-  }
-
-  // Increase Score
-  if (obstacles.length > 0 && obstacles[0].x + obstacles[0].width < moto.x + moto.width) {
-    score++;
-    scoreEl.textContent = "Score: " + score;
-  }
-
-  draw();
 }
 
-function gameOver() {
-  clearInterval(gameInterval);
-  alert("Game Over! Score: " + score);
+function updateGame() {
+  clearCanvas();
+  drawMoto();
+  drawObstacles();
+  updateMoto();
+  checkCollision();
 }
 
-function start() {
-  moto.y = 300;
-  obstacles.length = 0;
-  score = 0;
-  scoreEl.textContent = "Score: 0";
-  level = 1;
-  clearInterval(gameInterval);
-  gameInterval = setInterval(update, 30);
+function keyDownHandler(e) {
+  if (e.key === 'ArrowRight') keys.right = true;
+  if (e.key === 'ArrowLeft') keys.left = true;
+  if (e.key === 'ArrowUp') keys.up = true;
 }
 
-document.getElementById("restart").onclick = start;
-start();
+function keyUpHandler(e) {
+  if (e.key === 'ArrowRight') keys.right = false;
+  if (e.key === 'ArrowLeft') keys.left = false;
+  if (e.key === 'ArrowUp') keys.up = false;
+}
+
+document.addEventListener('keydown', keyDownHandler);
+document.addEventListener('keyup', keyUpHandler);
+
+function gameLoop() {
+  updateGame();
+  requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
 </script>
 </body>
 </html>
