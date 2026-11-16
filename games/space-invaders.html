@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Space Invaders</title>
+<style>
+  body {
+    margin: 0;
+    background: #000;
+    color: #0ff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    font-family: Arial, Helvetica, sans-serif;
+  }
+  canvas { border: 1px solid #0ff; }
+  a.back { color: #0ff; text-decoration: none; margin-top: 10px; }
+  h1 { color: #0ff; text-shadow: 0 0 15px #0ff; }
+</style>
+</head>
+<body>
+<a class="back" href="../index.html">Back to Hub</a>
+<h1>Space Invaders</h1>
+<canvas id="gameCanvas" width="600" height="400"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+let player = {
+  x: canvas.width / 2,
+  y: canvas.height - 30,
+  width: 50,
+  height: 20,
+  speed: 5
+};
+
+let keys = {
+  right: false,
+  left: false
+};
+
+let invaders = [];
+const rows = 4;
+const cols = 11;
+const invaderSize = 20;
+const invaderGap = 15;
+const invaderRowGap = 30;
+const invaderColGap = 20;
+
+for (let i = 0; i < rows; i++) {
+  invaders[i] = [];
+  for (let j = 0; j < cols; j++) {
+    invaders[i][j] = {
+      x: j * (invaderSize + invaderColGap) + invaderColGap,
+      y: i * (invaderSize + invaderRowGap) + invaderRowGap + 30,
+      width: invaderSize,
+      height: invaderSize,
+      alive: true
+    };
+  }
+}
+
+function drawPlayer() {
+  ctx.fillStyle = '#0ff';
+  ctx.fillRect(player.x, player.y, player.width, player.height);
+}
+
+function drawInvaders() {
+  ctx.fillStyle = '#f0f';
+  invaders.forEach(row => {
+    row.forEach(invader => {
+      if (invader.alive) {
+        ctx.fillRect(invader.x, invader.y, invader.width, invader.height);
+      }
+    });
+  });
+}
+
+function clearCanvas() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function updatePlayer() {
+  if (keys.left && player.x > 0) {
+    player.x -= player.speed;
+  }
+  if (keys.right && player.x < canvas.width - player.width) {
+    player.x += player.speed;
+  }
+}
+
+function updateGame() {
+  clearCanvas();
+  drawPlayer();
+  drawInvaders();
+  updatePlayer();
+}
+
+function keyDownHandler(e) {
+  if (e.key === 'ArrowRight') keys.right = true;
+  if (e.key === 'ArrowLeft') keys.left = true;
+}
+
+function keyUpHandler(e) {
+  if (e.key === 'ArrowRight') keys.right = false;
+  if (e.key === 'ArrowLeft') keys.left = false;
+}
+
+document.addEventListener('keydown', keyDownHandler);
+document.addEventListener('keyup', keyUpHandler);
+
+function gameLoop() {
+  updateGame();
+  requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
+</script>
+</body>
+</html>
