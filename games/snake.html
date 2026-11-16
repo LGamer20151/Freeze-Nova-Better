@@ -36,7 +36,7 @@ const rows = canvas.height / scale;
 const columns = canvas.width / scale;
 
 let snake;
-let snakeDirection;
+let snakeDirection = 'right';
 let food;
 let score = 0;
 
@@ -145,10 +145,10 @@ function changeDirection(event) {
   }
 }
 
-document.addEventListener('keyup', changeDirection);
+document.addEventListener('keydown', changeDirection);
 
+// Initialize the game
 snake = createSnake();
-snakeDirection = 'right';
 food = createFood();
 main();
 </script>
